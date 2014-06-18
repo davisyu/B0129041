@@ -1,0 +1,448 @@
+import random, sys, webbrowser, copy, pygame
+from pygame.locals import *
+範圍=range
+整數=int
+遊戲影像載入=pygame.image.load
+畫面建構=pygame.draw.rect
+事件公告=pygame.event.post
+遊戲顯示設定=pygame.display.set_mode
+遊戲主題顯示=pygame.display.set_caption
+遊戲時鐘=pygame.time.Clock
+遊戲開始=pygame.init
+遊戲介面=pygame.Surface
+事件取得=pygame.event.get
+遊戲畫面更新=pygame.display.update
+遊戲時間等待=pygame.time.wait
+遊戲離開=pygame.quit
+離開系統=sys.exit
+方塊類=pygame.Rect
+開啟瀏覽器=webbrowser.open
+# There are different 箱 sizes, number of 箱es, and
+# 生命 depending on the "板 size" setting selected.
+小箱尺寸  = 60 # size is in pixels
+中箱尺寸 = 20
+大箱尺寸  = 11
+
+小板尺寸  = 6 # size is in 箱es
+中板尺寸 = 17
+大板尺寸  = 30
+
+小生命值  = 10 # number of turns
+中生命值 = 30
+大生命值  = 64
+
+禎數 = 30
+視窗寬 = 640
+視窗高 = 480
+箱子尺寸 = 中箱尺寸
+調色板缺口大小 = 10
+調色板尺寸 = 45
+簡單 = 0   # arbitrary but unique value
+中等 = 1 # arbitrary but unique value
+難 = 2   # arbitrary but unique value
+
+難度 = 中等 # game starts in "medium" mode
+最大生命 = 中生命值
+板寬 = 中板尺寸
+板高 = 中板尺寸
+
+
+#            R    G    B
+白    = (255, 255, 255)
+暗灰 = ( 70,  70,  70)
+黑    = (  0,   0,   0)
+紅      = (255,   0,   0)
+綠    = (  0, 255,   0)
+藍     = (  0,   0, 255)
+黃   = (255, 255,   0)
+橘   = (255, 128,   0)
+紫   = (255,   0, 255)
+
+# The first 顏色 in each scheme is the background 顏色, the next six are the palette colors.
+色表 = (((150, 200, 255), 紅, 綠, 藍, 黃, 橘, 紫),
+                ((0, 155, 104),  (97, 215, 164),  (228, 0, 69),  (0, 125, 50),   (204, 246, 0),   (148, 0, 45),    (241, 109, 149)),
+                ((195, 179, 0),  (255, 239, 115), (255, 226, 0), (147, 3, 167),  (24, 38, 176),   (166, 147, 0),   (197, 97, 211)),
+                ((85, 0, 0),     (155, 39, 102),  (0, 201, 13),  (255, 118, 0),  (206, 0, 113),   (0, 130, 9),     (255, 180, 115)),
+                ((191, 159, 64), (183, 182, 208), (4, 31, 183),  (167, 184, 45), (122, 128, 212), (37, 204, 7),    (88, 155, 213)),
+                ((200, 33, 205), (116, 252, 185), (68, 56, 56),  (52, 238, 83),  (23, 149, 195),  (222, 157, 227), (212, 86, 185)))
+for i in 範圍(len(色表)):
+    assert len(色表[i]) == 7, 'Color scheme %s does not have exactly 7 colors.' % (i)
+背景色 = 色表[0][0]
+調色盤顏色 =  色表[0][1:]
+
+def 主函式():
+    global 禎數時鐘, 顯示介面, 標誌圖, 點圖, 設定圖, 設定按鈕圖, 重設按鈕圖
+
+    遊戲開始()
+    禎數時鐘 = 遊戲時鐘()
+    顯示介面 = 遊戲顯示設定((視窗寬, 視窗高))
+
+    # Load images
+    標誌圖 = 遊戲影像載入('inkspilllogo.png')
+    點圖 = 遊戲影像載入('inkspillspot.png')
+    設定圖 = 遊戲影像載入('inkspillsettings.png')
+    設定按鈕圖 = 遊戲影像載入('inkspillsettingsbutton.png')
+    重設按鈕圖 = 遊戲影像載入('inkspillresetbutton.png')
+
+    遊戲主題顯示('Ink Spill')
+    游標x = 0
+    游標y = 0
+    主板 = 隨機產生(板寬, 板高, 難度)
+    生命 = 最大生命
+    最後顏色點擊 = None
+
+    while True: # 主函式 game loop
+        調色板點擊 = None
+        重設遊戲 = False
+
+        # Draw the screen.
+        顯示介面.fill(背景色)
+        畫標誌和按鈕()
+        畫板(主板)
+        畫生命條(生命)
+        畫調色板()
+
+        離開確認()
+        for 事件 in 事件取得(): # 事件 handling loop
+            if 事件.type == MOUSEBUTTONUP:
+                游標x, 游標y = 事件.pos
+                if 方塊類(視窗寬 - 設定按鈕圖.get_width(),
+                               視窗高 - 設定按鈕圖.get_height(),
+                               設定按鈕圖.get_width(),
+                               設定按鈕圖.get_height()).collidepoint(游標x, 游標y):
+                    重設遊戲 = 秀設定影像() # clicked on Settings button
+                elif 方塊類(視窗寬 - 重設按鈕圖.get_width(),
+                                 視窗高 - 設定按鈕圖.get_height() - 重設按鈕圖.get_height(),
+                                 重設按鈕圖.get_width(),
+                                 重設按鈕圖.get_height()).collidepoint(游標x, 游標y):
+                    重設遊戲 = True # clicked on Reset button
+                else:
+                    # check if a palette button was clicked
+                    調色板點擊 = 取得調色位置(游標x, 游標y)
+
+        if 調色板點擊 != None and 調色板點擊 != 最後顏色點擊:
+            # a palette button was clicked that is different from the
+            # last palette button clicked (this check prevents the player
+            # from accidentally clicking the same palette twice)
+            最後顏色點擊 = 調色板點擊
+            氾濫動畫(主板, 調色板點擊)
+            生命 -= 1
+
+            重設遊戲 = False
+            if 勝利(主板):
+                for i in 範圍(4): # flash border 4 times
+                    更新板動畫(白, 主板)
+                重設遊戲 = True
+                遊戲時間等待(2000) # pause so the player can bask in victory
+            elif 生命 == 0:
+                # 生命 is zero, so player has lost
+                畫生命條(0)
+                遊戲畫面更新()
+                遊戲時間等待(400)
+                for i in 範圍(4):
+                    更新板動畫(黑, 主板)
+                重設遊戲 = True
+                遊戲時間等待(2000) # pause so the player can suffer in their defeat
+
+        if 重設遊戲:
+            # start a new game
+            主板 = 隨機產生(板寬, 板高, 難度)
+            生命 = 最大生命
+            最後顏色點擊 = None
+
+        遊戲畫面更新()
+        禎數時鐘.tick(禎數)
+
+
+def 離開確認():
+    # Terminates the program if there are any QUIT or escape key events.
+    for 事件 in 事件取得(QUIT): # get all the QUIT events
+        遊戲離開() # terminate if any QUIT events are present
+        離開系統()
+    for 事件 in 事件取得(KEYUP): # get all the KEYUP events
+        if 事件.key == K_ESCAPE:
+            遊戲離開() # terminate if the KEYUP 事件 was for the Esc key
+            離開系統()
+        事件公告(事件) # put the other KEYUP 事件 objects back
+
+
+def 勝利(板):
+    # if the entire 板 is the same 顏色, player has won
+    for x in 範圍(板寬):
+        for y in 範圍(板高):
+            if 板[x][y] != 板[0][0]:
+                return False # found a different 顏色, player has not won
+    return True
+
+
+def 秀設定影像():
+    global 難度, 箱子尺寸, 板寬, 板高, 最大生命, 調色盤顏色, 背景色
+
+    # The pixel coordinates in this function were obtained by loading
+    # the inkspillsettings.png image into a graphics editor and reading
+    # the pixel coordinates from there. Handy trick.
+
+    原始難度 = 難度
+    原始箱尺寸 = 箱子尺寸
+    畫面須重繪 = True
+
+    while True:
+        if 畫面須重繪:
+            顯示介面.fill(背景色)
+            顯示介面.blit(設定圖, (0,0))
+
+            # place the ink spot marker next to the selected 難度
+            if 難度 == 簡單:
+                顯示介面.blit(點圖, (30, 4))
+            if 難度 == 中等:
+                顯示介面.blit(點圖, (8, 41))
+            if 難度 == 難:
+                顯示介面.blit(點圖, (30, 76))
+
+            # place the ink spot marker next to the selected size
+            if 箱子尺寸 == 小箱尺寸:
+                顯示介面.blit(點圖, (22, 150))
+            if 箱子尺寸 == 中箱尺寸:
+                顯示介面.blit(點圖, (11, 185))
+            if 箱子尺寸 == 大箱尺寸:
+                顯示介面.blit(點圖, (24, 220))
+
+            for i in 範圍(len(色表)):
+                畫顏色表(500, i * 60 + 30, i)
+
+            遊戲畫面更新()
+
+        畫面須重繪 = False # by default, don't redraw the screen
+        for 事件 in 事件取得(): # 事件 handling loop
+            if 事件.type == QUIT:
+                遊戲離開()
+                離開系統()
+            elif 事件.type == KEYUP:
+                if 事件.key == K_ESCAPE:
+                    # Esc key on settings screen goes back to game
+                    return not (原始難度 == 難度 and 原始箱尺寸 == 箱子尺寸)
+            elif 事件.type == MOUSEBUTTONUP:
+                畫面須重繪 = True # screen should be redrawn
+                游標x, 游標y = 事件.pos # syntactic sugar
+
+                # check for clicks on the 難度 buttons
+                if 方塊類(74, 16, 111, 30).collidepoint(游標x, 游標y):
+                    難度 = 簡單
+                elif 方塊類(53, 50, 104, 29).collidepoint(游標x, 游標y):
+                    難度 = 中等
+                elif 方塊類(72, 85, 65, 31).collidepoint(游標x, 游標y):
+                    難度 = 難
+
+                # check for clicks on the size buttons
+                elif 方塊類(63, 156, 84, 31).collidepoint(游標x, 游標y):
+                    # small 板 size setting:
+                    箱子尺寸 = 小箱尺寸
+                    板寬 = 小板尺寸
+                    板高 = 小板尺寸
+                    最大生命 = 小生命值
+                elif 方塊類(52, 192, 106,32).collidepoint(游標x, 游標y):
+                    # medium 板 size setting:
+                    箱子尺寸 = 中箱尺寸
+                    板寬 = 中板尺寸
+                    板高 = 中板尺寸
+                    最大生命 = 中生命值
+                elif 方塊類(67, 228, 58, 37).collidepoint(游標x, 游標y):
+                    # large 板 size setting:
+                    箱子尺寸 = 大箱尺寸
+                    板寬 = 大板尺寸
+                    板高 = 大板尺寸
+                    最大生命 = 大生命值
+                elif 方塊類(14, 299, 371, 97).collidepoint(游標x, 游標y):
+                    # clicked on the "learn programming" ad
+                    開啟瀏覽器('http://inventwithpython.com') # opens a web browser
+                elif 方塊類(178, 418, 215, 34).collidepoint(游標x, 游標y):
+                    # clicked on the "back to game" button
+                    return not (原始難度 == 難度 and 原始箱尺寸 == 箱子尺寸)
+
+                for i in 範圍(len(色表)):
+                    # clicked on a 顏色 scheme button
+                    if 方塊類(500, 30 + i * 60, 中箱尺寸 * 3, 中箱尺寸 * 2).collidepoint(游標x, 游標y):
+                        背景色 = 色表[i][0]
+                        調色盤顏色  = 色表[i][1:]
+
+
+def 畫顏色表(x, y, 表序):
+    # Draws the 顏色 scheme boxes that appear on the "Settings" screen.
+    for 箱y in 範圍(2):
+        for 箱x in 範圍(3):
+            畫面建構(顯示介面, 色表[表序][3 * 箱y + 箱x + 1], (x + 中箱尺寸 * 箱x, y + 中箱尺寸 * 箱y, 中箱尺寸, 中箱尺寸))
+            if 調色盤顏色 == 色表[表序][1:]:
+                # put the ink spot next to the selected 顏色 scheme
+                顯示介面.blit(點圖, (x - 50, y))
+
+
+def 更新板動畫(顏色, 板, 動畫速=30):
+    原介面 = 顯示介面.copy()
+    更新介面 = 遊戲介面(顯示介面.get_size())
+    更新介面 = 更新介面.convert_alpha()
+    for start, end, step in ((0, 256, 1), (255, 0, -1)):
+        # the first iteration on the outer loop will set the inner loop
+        # to have 透明度 go from 0 to 255, the second iteration will
+        # have it go from 255 to 0. This is the "flash".
+        for 透明度 in 範圍(start, end, 動畫速 * step):
+            顯示介面.blit(原介面, (0, 0))
+            r, g, b = 顏色
+            更新介面.fill((r, g, b, 透明度))
+            顯示介面.blit(更新介面, (0, 0))
+            畫板(板) # draw 板 ON TOP OF the 透明度 layer
+            遊戲畫面更新()
+            禎數時鐘.tick(禎數)
+    顯示介面.blit(原介面, (0, 0)) # redraw the original surface
+
+
+def 氾濫動畫(板, 調色板點擊, 動畫速=25):
+    原板 = copy.deepcopy(板)
+    填滿(板, 板[0][0], 調色板點擊, 0, 0)
+
+    for 透明度 in 範圍(0, 255, 動畫速):
+        # The "new" 板 slowly become opaque over the original 板.
+        畫板(原板)
+        畫板(板, 透明度)
+        遊戲畫面更新()
+        禎數時鐘.tick(禎數)
+
+
+def 隨機產生(寬, 高, 難度=中等):
+    # Creates a 板 data structure with random colors for each box.
+    板 = []
+    for x in 範圍(寬):
+        行 = []
+        for y in 範圍(高):
+            行.append(random.randint(0, len(調色盤顏色) - 1))
+        板.append(行)
+
+    # Make 板 easier by setting some boxes to same 顏色 as a neighbor.
+
+    # Determine how many boxes to change.
+    if 難度 == 簡單:
+        if 箱子尺寸 == 小箱尺寸:
+            改變箱子 = 100
+        else:
+            改變箱子 = 1500
+    elif 難度 == 中等:
+        if 箱子尺寸 == 小箱尺寸:
+            改變箱子 = 5
+        else:
+            改變箱子 = 200
+    else:
+        改變箱子 = 0
+
+    # Change neighbor's colors:
+    for i in 範圍(改變箱子):
+        # Randomly choose a box whose 顏色 to copy
+        x = random.randint(1, 寬-2)
+        y = random.randint(1, 高-2)
+
+        # Randomly choose neighbors to change.
+        方向 = random.randint(0, 3)
+        if 方向 == 0: # change 左 and up neighbor
+            板[x-1][y] == 板[x][y]
+            板[x][y-1] == 板[x][y]
+        elif 方向 == 1: # change right and down neighbor
+            板[x+1][y] == 板[x][y]
+            板[x][y+1] == 板[x][y]
+        elif 方向 == 2: # change right and up neighbor
+            板[x][y-1] == 板[x][y]
+            板[x+1][y] == 板[x][y]
+        else: # change 左 and down neighbor
+            板[x][y+1] == 板[x][y]
+            板[x-1][y] == 板[x][y]
+    return 板
+
+
+def 畫標誌和按鈕():
+    # draw the Ink Spill logo and Settings and Reset buttons.
+    顯示介面.blit(標誌圖, (視窗寬 - 標誌圖.get_width(), 0))
+    顯示介面.blit(設定按鈕圖, (視窗寬 - 設定按鈕圖.get_width(), 視窗高 - 設定按鈕圖.get_height()))
+    顯示介面.blit(重設按鈕圖, (視窗寬 - 重設按鈕圖.get_width(), 視窗高 - 設定按鈕圖.get_height() - 重設按鈕圖.get_height()))
+
+
+def 畫板(板, 透明度=255):
+    # The colored squares are drawn to a temporary surface which is then
+    # drawn to the 顯示介面 surface. This is done so we can draw the
+    # squares with 透明度 on 頂點 of 顯示介面 as it currently is.
+    暫存介面 = 遊戲介面(顯示介面.get_size())
+    暫存介面 = 暫存介面.convert_alpha()
+    暫存介面.fill((0, 0, 0, 0))
+
+    for x in 範圍(板寬):
+        for y in 範圍(板高):
+            左, 頂點 = 左上角點(x, y)
+            r, g, b = 調色盤顏色[板[x][y]]
+            畫面建構(暫存介面, (r, g, b, 透明度), (左, 頂點, 箱子尺寸, 箱子尺寸))
+    左, 頂點 = 左上角點(0, 0)
+    畫面建構(暫存介面, 黑, (左-1, 頂點-1, 箱子尺寸 * 板寬 + 1, 箱子尺寸 * 板高 + 1), 1)
+    顯示介面.blit(暫存介面, (0, 0))
+
+
+def 畫調色板():
+    # Draws the six 顏色 palettes at the bottom of the screen.
+    顏色數 = len(調色盤顏色)
+    x邊 = 整數((視窗寬 - ((調色板尺寸 * 顏色數) + (調色板缺口大小 * (顏色數 - 1)))) / 2)
+    for i in 範圍(顏色數):
+        左 = x邊 + (i * 調色板尺寸) + (i * 調色板缺口大小)
+        頂點 = 視窗高 - 調色板尺寸 - 10
+        畫面建構(顯示介面, 調色盤顏色[i], (左, 頂點, 調色板尺寸, 調色板尺寸))
+        畫面建構(顯示介面, 背景色,   (左 + 2, 頂點 + 2, 調色板尺寸 - 4, 調色板尺寸 - 4), 2)
+
+
+def 畫生命條(目前生命):
+    生命箱尺寸 = 整數((視窗高 - 40) / 最大生命)
+
+    # Draw background 顏色 of 生命 meter.
+    畫面建構(顯示介面, 背景色, (20, 20, 20, 20 + (最大生命 * 生命箱尺寸)))
+
+    for i in 範圍(最大生命):
+        if 目前生命 >= (最大生命 - i): # draw a solid red box
+            畫面建構(顯示介面, 紅, (20, 20 + (i * 生命箱尺寸), 20, 生命箱尺寸))
+        畫面建構(顯示介面, 白, (20, 20 + (i * 生命箱尺寸), 20, 生命箱尺寸), 1) # draw white outline
+
+
+def 取得調色位置(x, y):
+    # Returns the index of the 顏色 in 調色盤顏色 that the x and y parameters
+    # are over. Returns None if x and y are not over any palette.
+    顏色數 = len(調色盤顏色)
+    x邊 = 整數((視窗寬 - ((調色板尺寸 * 顏色數) + (調色板缺口大小 * (顏色數 - 1)))) / 2)
+    頂點 = 視窗高 - 調色板尺寸 - 10
+    for i in 範圍(顏色數):
+        # Find out if the 游標 click is inside any of the palettes.
+        左 = x邊 + (i * 調色板尺寸) + (i * 調色板缺口大小)
+        r = 方塊類(左, 頂點, 調色板尺寸, 調色板尺寸)
+        if r.collidepoint(x, y):
+            return i
+    return None # no palette exists at these x, y coordinates
+
+
+def 填滿(板, 舊顏色, 新顏色, x, y):
+    # This is the flood fill algorithm.
+    if 舊顏色 == 新顏色 or 板[x][y] != 舊顏色:
+        return
+
+    板[x][y] = 新顏色 # change the 顏色 of the current box
+
+    # Make the recursive call for any neighboring boxes:
+    if x > 0:
+        填滿(板, 舊顏色, 新顏色, x - 1, y) # on box to the 左
+    if x < 板寬 - 1:
+        填滿(板, 舊顏色, 新顏色, x + 1, y) # on box to the right
+    if y > 0:
+        填滿(板, 舊顏色, 新顏色, x, y - 1) # on box to up
+    if y < 板高 - 1:
+        填滿(板, 舊顏色, 新顏色, x, y + 1) # on box to down
+
+
+def 左上角點(箱x, 箱y):
+    # Returns the x and y of the 左-topmost pixel of the xth & yth 箱.
+    x邊 = 整數((視窗寬 - (板寬 * 箱子尺寸)) / 2)
+    y邊 = 整數((視窗高 - (板高 * 箱子尺寸)) / 2)
+    return (箱x * 箱子尺寸 + x邊, 箱y * 箱子尺寸 + y邊)
+
+
+if __name__ == '__main__':
+    主函式()
+
